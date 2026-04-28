@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package hyrch_serving;
+
+message DetectRequest {
+    string json_data = 1;
+    bytes image_data = 2;
+}
+
+message DetectResponse {
+    string json_data = 1;
+}
+
+service YoloService {
+    rpc Detect(DetectRequest) returns (DetectResponse) {}
+}
