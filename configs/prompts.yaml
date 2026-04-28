@@ -1,0 +1,31 @@
+# Prompt Templates (Version Controlled)
+# These prompts MUST NOT vary across pipelines
+
+prompts:
+  # Atomic queries
+  atomic:
+    cars: "How many cars are there?"
+    pedestrians: "How many pedestrians are there?"
+    bicycles: "How many bicycles are there?"
+    
+  # Composite query
+  composite: |
+    Describe the scene. Include:
+    - Number of cars
+    - Number of pedestrians
+    - Number of bicycles
+    - One sentence describing the environment
+    
+  # System prompt (identical across all pipelines)
+  system: "You are a vision analysis assistant. Analyze the provided scene information and answer questions accurately."
+  
+  # Prompt for processing intermediate representation
+  ir_prompt: |
+    Based on the following vision processing output, answer the user's question.
+    
+    Vision Output:
+    {intermediate_representation}
+    
+    Question: {query}
+    
+    Provide a structured response with counts and description as requested.

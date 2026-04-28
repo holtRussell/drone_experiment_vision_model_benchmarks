@@ -1,0 +1,37 @@
+# Experiment Configuration
+experiment:
+  name: "visdrone_benchmark"
+  dataset_path: "data/visdrone"
+  num_images: 100  # Minimum 100-200 as per requirements
+  repetitions: 3  # Run each pipeline multiple times
+  
+  # Image preprocessing
+  image:
+    max_dimension: 640
+    format: "jpg"
+    
+  # Pipelines to run
+  pipelines:
+    - "yolo_local"
+    - "yolo_mcp"
+    - "vlm_direct"
+    - "vlm_multiagent"
+    
+  # Queries to run
+  queries:
+    atomic:
+      - "How many cars are there?"
+      - "How many pedestrians are there?"
+      - "How many bicycles are there?"
+    composite: true
+    
+  # Caching
+  cache:
+    enabled: true
+    vision_cache: true
+    llm_cache: false  # Optional per requirements
+    
+  # Resource monitoring
+  monitoring:
+    enabled: true
+    gpu_check: true  # Will check but may not be available on Mac
