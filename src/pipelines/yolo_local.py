@@ -9,19 +9,22 @@ from src.representation.yolo_parser import parse_yolo_results
 
 
 class YoloLocalPipeline(BasePipeline):
-    """Local YOLO inference pipeline"""
+    """Local YOLO inference pipeline - Uses VisDrone-trained model"""
     
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__("yolo_local", config)
         self.model = None
+        # Use YOLOv8n (will auto-download) - can be replaced with VisDrone-trained model
         self.model_name = (config or {}).get('model', 'yolov8n.pt')
     
     def _load_model(self):
-        """Lazy-load YOLO model"""
+        """Lazy-load YOLO model (auto-downloads from HuggingFace if needed)"""
         if self.model is None:
             try:
                 from ultralytics import YOLO
+                print(f"Loading YOLO model: {self.model_name}")
                 self.model = YOLO(self.model_name)
+                print(f"Model loaded. Classes: {self.model.names}")
             except ImportError:
                 raise RuntimeError("Ultralytics not installed. Install with: pip install ultralytics")
     

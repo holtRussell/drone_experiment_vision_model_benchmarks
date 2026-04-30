@@ -28,24 +28,30 @@ def main():
     print("Loading configurations...")
     configs = load_all_configs()
     
+    # Flatten the structure (experiment.yaml has nested 'experiment:' key)
+    def flatten_config(config, key):
+        if key in config and isinstance(config[key], dict) and key in config[key]:
+            return config[key][key]
+        return config.get(key, {})
+    
     # Override with command line args
     if args.num_images:
-        configs['experiment']['experiment']['num_images'] = args.num_images
+        configs['experiment']['num_images'] = args.num_images
     
     if args.pipelines:
-        configs['experiment']['experiment']['pipelines'] = args.pipelines
+        configs['experiment']['pipelines'] = args.pipelines
     
-    # Merge configs
+    # Build full_config for the runner
     full_config = {
-        'model': configs.get('model', {}),
-        'experiment': configs.get('experiment', {}),
-        'prompts': configs.get('prompts', {})
+        'model': flatten_config(configs, 'model'),
+        'experiment': flatten_config(configs, 'experiment'),
+        'prompts': flatten_config(configs, 'prompts')
     }
     
-    print(f"Dataset: {full_config['experiment']['experiment']['dataset_path']}")
-    print(f"Images: {full_config['experiment']['experiment']['num_images']}")
-    print(f"Pipelines: {full_config['experiment']['experiment']['pipelines']}")
-    print(f"Repetitions: {full_config['experiment']['experiment']['repetitions']}")
+    print(f"Dataset: {full_config['experiment']['dataset_path']}")
+    print(f"Images: {full_config['experiment']['num_images']}")
+    print(f"Pipelines: {full_config['experiment']['pipelines']}")
+    print(f"Repetitions: {full_config['experiment']['repetitions']}")
     print()
     
     # Run experiment

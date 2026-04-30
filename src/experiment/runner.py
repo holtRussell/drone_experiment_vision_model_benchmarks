@@ -53,7 +53,9 @@ class ExperimentRunner:
         if not pipeline_class:
             raise ValueError(f"Unknown pipeline: {pipeline_name}")
         
-        pipeline_config = self.config.get('experiment', {}).get('pipelines', {}).get(pipeline_name, {})
+        # Pipeline config is in full_config['experiment']['pipeline_configs'][pipeline_name]
+        pipeline_configs = self.config.get('experiment', {}).get('pipeline_configs', {})
+        pipeline_config = pipeline_configs.get(pipeline_name, {})
         return pipeline_class(config=pipeline_config)
     
     def run_image(

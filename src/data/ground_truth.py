@@ -1,19 +1,19 @@
 from pathlib import Path
 from typing import Dict, Optional
-import pandas as pd
+
+# VisDrone annotation format (per line):
+# <bbox_left>,<bbox_top>,<bbox_width>,<bbox_height>,<score>,<object_category>,<truncation>,<occlusion>
+# 
+# Object categories (1-10 as per VisDrone dataset):
+# 1: pedestrian, 2: people, 3: bicycle, 4: car, 5: van, 6: truck, 7: tricycle, 8: awning-tricycle, 9: bus, 10: motor
 
 
 class VisDroneGroundTruth:
     """
     Parse VisDrone annotations to extract object counts.
-    
-    VisDrone annotation format (per line):
-    <bbox_left>,<bbox_top>,<bbox_width>,<bbox_height>,<score>,<object_category>,<truncation>,<occlusion>
-    
-    Object categories:
-    1: pedestrian, 2: people, 3: bicycle, 4: car, 5: van, 6: truck, 7: tricycle, 8: awning-tricycle, 9: bus, 10: motor
     """
     
+    # Mapping from VisDrone category ID to our three categories
     CATEGORY_MAP = {
         1: "pedestrian",  # pedestrian
         2: "pedestrian",  # people (count as pedestrian)

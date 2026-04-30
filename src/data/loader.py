@@ -1,8 +1,6 @@
-import os
 from pathlib import Path
 from typing import List, Dict, Optional, Iterator
 from PIL import Image
-import yaml
 
 
 class VisDroneLoader:
@@ -29,7 +27,7 @@ class VisDroneLoader:
     def get_image_list(self) -> List[Path]:
         """Get list of all image paths"""
         if not self.images_dir.exists():
-            raise FileNotFoundError(f"Images directory not found: {self.images_dir}")
+            return []
         
         return sorted(self.images_dir.glob("*.jpg")) + sorted(self.images_dir.glob("*.png"))
     
@@ -38,7 +36,7 @@ class VisDroneLoader:
         image_paths = self.get_image_list()
         
         for img_path in image_paths:
-            image_id = img_path.stem
+            image_id = img_path.stem  # filename without extension
             
             yield {
                 "image_id": image_id,

@@ -13,9 +13,24 @@ experiment:
   # Pipelines to run
   pipelines:
     - "yolo_local"
-    - "yolo_mcp"
+    # - "yolo_mcp"  # Disabled - waiting for custom MCP server code
     - "vlm_direct"
     - "vlm_multiagent"
+    
+  # Pipeline-specific configs
+  pipeline_configs:
+    yolo_local:
+      model: "mshamrai/yolov8n-visdrone"  # VisDrone-trained YOLOv8n
+      conf: 0.25
+    yolo_mcp:
+      enabled: false  # Placeholder - add your custom MCP server details here
+      mcp_url: "http://localhost:8080"
+      endpoint: "/detect"
+    vlm_direct:
+      temperature: 0.1
+    vlm_multiagent:
+      temperature: 0.1
+      max_iterations: 3
     
   # Queries to run
   queries:
