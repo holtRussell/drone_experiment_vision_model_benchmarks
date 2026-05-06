@@ -6,7 +6,8 @@
 2. **Dataset**: Download VisDrone-DET from http://aiskyeye.com/download/ or https://github.com/VisDrone/VisDrone-Dataset
    - Place zips in `data/visdrone/`, extract, organize: `images/*.jpg`, `annotations/*.txt`
 3. **vLLM Server**: `vllm-mlx serve mlx-community/gemma-4-e4b-it-4bit --port 8000`
-4. **Run**: `python main.py --num-images 10 --pipelines yolo_local`
+4. **MCP Server** (for yolo_mcp pipeline): `cd image_detection && python object_detection_server.py`
+5. **Run**: `python main.py --num-images 10 --pipelines yolo_local yolo_mcp`
 
 ## Architecture
 

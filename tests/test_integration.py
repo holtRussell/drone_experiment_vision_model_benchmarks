@@ -82,7 +82,7 @@ def test_llm_client_init():
     """Test LLM client initialization"""
     print("Testing LLM client init...")
     client = LLMClient()
-    assert client.vllm_url is not None
+    assert client.ollama_url is not None
     assert client.model_name is not None
     print("  PASSED (client init only, no API call)")
 

@@ -35,7 +35,8 @@ class ExperimentRunner:
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.llm_client = LLMClient()
+        self.mock_mode = self.config.get('experiment', {}).get('mock_llm', False)
+        self.llm_client = LLMClient(mock_mode=self.mock_mode)
         self.prompts = PromptTemplates()
         self.ground_truth = VisDroneGroundTruth()
         self.timing = TimingStats()

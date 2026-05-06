@@ -13,19 +13,18 @@ experiment:
   # Pipelines to run
   pipelines:
     - "yolo_local"
-    # - "yolo_mcp"  # Disabled - waiting for custom MCP server code
+    - "yolo_mcp"  # Requires: cd image_detection && python object_detection_server.py
     - "vlm_direct"
     - "vlm_multiagent"
     
   # Pipeline-specific configs
   pipeline_configs:
     yolo_local:
-      model: "mshamrai/yolov8n-visdrone"  # VisDrone-trained YOLOv8n
+      model: "models/yolov8-visdrone.pt"  # VisDrone-trained YOLOv8
       conf: 0.25
     yolo_mcp:
-      enabled: false  # Placeholder - add your custom MCP server details here
-      mcp_url: "http://localhost:8080"
-      endpoint: "/detect"
+      enabled: true
+      mcp_url: "http://localhost:8099"  # image_detection server
     vlm_direct:
       temperature: 0.1
     vlm_multiagent:

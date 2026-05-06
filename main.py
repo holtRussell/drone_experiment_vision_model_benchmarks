@@ -34,19 +34,19 @@ def main():
             return config[key][key]
         return config.get(key, {})
     
-    # Override with command line args
-    if args.num_images:
-        configs['experiment']['num_images'] = args.num_images
-    
-    if args.pipelines:
-        configs['experiment']['pipelines'] = args.pipelines
-    
     # Build full_config for the runner
     full_config = {
         'model': flatten_config(configs, 'model'),
         'experiment': flatten_config(configs, 'experiment'),
         'prompts': flatten_config(configs, 'prompts')
     }
+    
+    # Override with command line args (applied after flattening)
+    if args.num_images:
+        full_config['experiment']['num_images'] = args.num_images
+    
+    if args.pipelines:
+        full_config['experiment']['pipelines'] = args.pipelines
     
     print(f"Dataset: {full_config['experiment']['dataset_path']}")
     print(f"Images: {full_config['experiment']['num_images']}")

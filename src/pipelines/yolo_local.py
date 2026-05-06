@@ -18,12 +18,31 @@ class YoloLocalPipeline(BasePipeline):
         self.model_name = (config or {}).get('model', 'yolov8n.pt')
     
     def _load_model(self):
-        """Lazy-load YOLO model (auto-downloads from HuggingFace if needed)"""
+        """Lazy-load YOLO model (auto-downloads from Ultralytics Hub if needed)"""
         if self.model is None:
             try:
                 from ultralytics import YOLO
                 print(f"Loading YOLO model: {self.model_name}")
-                self.model = YOLO(self.model_name)
+                
+                # Handle HuggingFace model format (e.g., mshamrai/yolov8n-visdrone)
+                if '/' in self.model_name and not self.model_name.endswith('.pt'):
+                    # Try to download from HuggingFace to a local file
+                    try:
+                        from huggingface_hub import hf_hub_download
+                        local_path = hf_hub_download(
+                            repo_id=self.model_name.split('/')[0] + '/' + self.model_name.split('/')[1],
+                            filename='yolov8n-visdrone.pt',
+                            cache_dir='./models'
+                        )
+                        self.model = YOLO(local_path)
+                    except Exception as e:
+                        print(f"Could not load from HuggingFace: {e}")
+                        print("Falling back to yolov8n.pt (will download if needed)")
+                        self.model = YOLO('yolov8n.pt')
+                else:
+                    # Standard ultralytics model (auto-downloads if needed)
+                    self.model = YOLO(self.model_name)
+                
                 print(f"Model loaded. Classes: {self.model.names}")
             except ImportError:
                 raise RuntimeError("Ultralytics not installed. Install with: pip install ultralytics")

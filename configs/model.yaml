@@ -1,17 +1,16 @@
 # Model Configuration
 model:
-  name: "gemma-4-e4b"
+  name: "gemma4:e4b"
   type: "gemma4:e4b"
   temperature: 0.1
   max_tokens: 2048
   system_prompt: "You are a vision analysis assistant. Analyze the provided scene information and answer questions accurately."
 
-# vLLM Endpoint Configuration (from TypeFly reference)
-vllm:
-  url: "${VLLM_URL:http://localhost:8000/v1}"
-  api_key: "${VLLM_API_KEY:token-abc123}"
+# Ollama Endpoint Configuration (OpenAI-compatible)
+ollama:
+  url: "${OLLAMA_URL:http://localhost:11434/v1}"
+  api_key: "${OLLAMA_API_KEY:ollama}"
   timeout: 60
 
-# Gemma4 ModelType reference from TypeFly
-# ModelType.GEMMA3 = "mlx-community/gemma-4-e4b-it-4bit"
-model_type: "mlx-community/gemma-4-e4b-it-4bit"
+# Gemma4 ModelType reference
+model_type: "gemma4:e4b"
