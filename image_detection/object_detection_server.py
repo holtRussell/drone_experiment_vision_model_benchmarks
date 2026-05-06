@@ -1,4 +1,4 @@
-# #Patch torch.load to use weights_only=False before ultralytics imports it
+# Patch torch.load to use weights_only=False before ultralytics imports it
 import torch
 _original_load = torch.load
 def _patched_load(f, *args, **kwargs):
