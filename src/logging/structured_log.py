@@ -3,7 +3,7 @@ Structured logging for experiment runs
 """
 import json
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 
@@ -98,6 +98,38 @@ class StructuredLogger:
             event_type="resource_usage",
             data=resources,
             image_id=image_id
+        )
+    
+    def log_vision_metrics(
+        self,
+        image_id: str,
+        pipeline: str,
+        data: Dict[str, Any]
+    ):
+        """Log enhanced vision metrics"""
+        self.log(
+            event_type="vision_metrics",
+            data=data,
+            image_id=image_id,
+            pipeline=pipeline
+        )
+    
+    def log_timeseries_resources(
+        self,
+        image_id: str,
+        pipeline: str,
+        samples: List[Dict[str, Any]],
+        summary: Dict[str, Any]
+    ):
+        """Log time-series resource data"""
+        self.log(
+            event_type="timeseries_resources",
+            data={
+                "samples": samples,
+                "summary": summary
+            },
+            image_id=image_id,
+            pipeline=pipeline
         )
     
     def save(self):

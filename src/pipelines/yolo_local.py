@@ -55,7 +55,7 @@ class YoloLocalPipeline(BasePipeline):
             image: PIL Image
             
         Returns:
-            Intermediate Representation
+            Intermediate Representation with enhanced metrics
         """
         self._load_model()
         
@@ -66,8 +66,8 @@ class YoloLocalPipeline(BasePipeline):
         
         self._latency_ms = (time.perf_counter() - start_time) * 1000
         
-        # Parse results to IR
-        ir = parse_yolo_results(results, pipeline_name=self.name)
+        # Parse results to IR with image for resolution tracking
+        ir = parse_yolo_results(results, pipeline_name=self.name, image=image)
         ir['metadata']['latency_ms'] = self._latency_ms
         
         return ir

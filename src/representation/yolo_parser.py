@@ -2,7 +2,7 @@
 Parser to convert YOLO detection results to Intermediate Representation
 Supports both COCO and VisDrone-trained YOLO models
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from src.representation.schema import create_ir
 
 
@@ -48,7 +48,8 @@ def detect_model_type(model_names: dict) -> str:
 
 def parse_yolo_results(
     yolo_results,
-    pipeline_name: str = "yolo_local"
+    pipeline_name: str = "yolo_local",
+    image: Optional[object] = None
 ) -> Dict[str, Any]:
     """
     Parse YOLO results to Intermediate Representation.
@@ -56,9 +57,10 @@ def parse_yolo_results(
     Args:
         yolo_results: Ultralytics YOLO results object
         pipeline_name: Name of the pipeline for tracking
+        image: Optional PIL Image to extract resolution
         
     Returns:
-        Intermediate Representation dict
+        Intermediate Representation dict with enhanced metrics
     """
     cars = 0
     pedestrians = 0
@@ -74,6 +76,9 @@ def parse_yolo_results(
     model_type = "coco"  # default
     if yolo_results and hasattr(yolo_results[0], 'names'):
         model_type = detect_model_type(yolo_results[0].names)
+    
+    # Track confidences per class for averaging
+    conf_per_class = {"car": [], "pedestrian": [], "bicycle": []}
     
     for result in yolo_results:
         if hasattr(result, 'boxes') and result.boxes is not None:
@@ -93,25 +98,52 @@ def parse_yolo_results(
                     "bbox": box.xyxy.tolist()[0] if hasattr(box.xyxy, 'tolist') else list(box.xyxy[0])
                 })
                 
-                # Map to our three categories
+                # Map to our three categories and track confidences
                 class_name_lower = class_name.lower()
                 
                 if model_type == "visdrone":
                     # VisDrone model - direct mapping
                     if 'pedestrian' in class_name_lower or 'people' in class_name_lower:
                         pedestrians += 1
+                        conf_per_class["pedestrian"].append(conf)
                     elif 'car' in class_name_lower or 'van' in class_name_lower or 'truck' in class_name_lower or 'bus' in class_name_lower:
                         cars += 1
+                        conf_per_class["car"].append(conf)
                     elif 'bicycle' in class_name_lower or 'tricycle' in class_name_lower or 'motor' in class_name_lower:
                         bicycles += 1
+                        conf_per_class["bicycle"].append(conf)
                 else:
                     # COCO model
                     if 'person' in class_name_lower:
                         pedestrians += 1
+                        conf_per_class["pedestrian"].append(conf)
                     elif 'car' in class_name_lower or 'truck' in class_name_lower or 'bus' in class_name_lower:
                         cars += 1
+                        conf_per_class["car"].append(conf)
                     elif 'bicycle' in class_name_lower or 'motorcycle' in class_name_lower:
                         bicycles += 1
+                        conf_per_class["bicycle"].append(conf)
+    
+    # Calculate average confidence per class
+    avg_confidence_per_class = {}
+    for cls, confs in conf_per_class.items():
+        if confs:
+            avg_confidence_per_class[cls] = sum(confs) / len(confs)
+    
+    # Get all confidence scores
+    confidence_scores = [d["confidence"] for d in detections]
+    
+    # Get image resolution if available
+    image_resolution = None
+    if image is not None and hasattr(image, 'size'):
+        image_resolution = image.size  # (width, height)
+    
+    # Get model input size if available from results
+    model_input_size = None
+    if yolo_results and hasattr(yolo_results[0], 'orig_shape'):
+        # orig_shape is (height, width)
+        h, w = yolo_results[0].orig_shape
+        model_input_size = (w, h)
     
     return create_ir(
         cars=cars,
@@ -119,6 +151,10 @@ def parse_yolo_results(
         bicycles=bicycles,
         raw_description=f"Detected {len(detections)} objects: {cars} cars, {pedestrians} pedestrians, {bicycles} bicycles",
         pipeline_name=pipeline_name,
+        confidence_scores=confidence_scores,
+        avg_confidence_per_class=avg_confidence_per_class if avg_confidence_per_class else None,
+        image_resolution=image_resolution,
+        model_input_size=model_input_size,
         metadata={
             "detections": detections,
             "total_detections": len(detections),
