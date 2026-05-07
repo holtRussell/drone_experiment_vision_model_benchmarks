@@ -1,6 +1,6 @@
 """
 Time-series resource monitoring for vision pipeline benchmarking
-Samples CPU, GPU, Memory at regular intervals during processing
+Samples CPU, GPU, Memory, and Power at regular intervals during processing
 """
 import threading
 import time
@@ -25,16 +25,30 @@ class TimeSeriesMonitor:
         self._thread: Optional[threading.Thread] = None
         self.start_time: Optional[float] = None
         self._monitor_gpu = False
+        self._power_monitor = None
         
-        # Check if we're on Mac (for GPU monitoring via powermetrics)
+        # Check if we're on Mac (for GPU/power monitoring via powermetrics)
         import platform
         self.is_mac = platform.system() == "Darwin"
+        
+        # Initialize power monitor if on Mac
+        if self.is_mac:
+            try:
+                from src.logging.power_monitor import PowerMonitor
+                self._power_monitor = PowerMonitor()
+            except:
+                self._power_monitor = None
     
     def start(self):
         """Start sampling in background thread"""
         self.samples = []
         self.start_time = time.perf_counter()
         self._stop_event.clear()
+        
+        # Set baseline for process CPU measurement
+        self._process = psutil.Process()
+        self._process.cpu_percent()  # First call sets baseline, returns 0.0
+        
         self._thread = threading.Thread(target=self._sample_loop, daemon=True)
         self._thread.start()
     
@@ -59,17 +73,24 @@ class TimeSeriesMonitor:
             "elapsed_ms": elapsed_ms,
             "cpu_percent": psutil.cpu_percent(interval=None),
             "memory_percent": psutil.virtual_memory().percent,
-            "memory_mb": psutil.Process().memory_info().rss / 1024 / 1024,
+            "memory_mb": self._process.memory_info().rss / 1024 / 1024,
             "memory_total_mb": psutil.virtual_memory().total / 1024 / 1024,
         }
         
         # Per-core CPU usage
         sample["cpu_per_core"] = psutil.cpu_percent(percpu=True)
         
-        # Process-specific info
-        process = psutil.Process()
-        sample["process_cpu_percent"] = process.cpu_percent()
-        sample["process_threads"] = process.num_threads()
+        # Process-specific info (now returns actual CPU % since baseline was set)
+        sample["process_cpu_percent"] = self._process.cpu_percent()
+        sample["process_threads"] = self._process.num_threads()
+        
+        # Power measurements (if available)
+        if self._power_monitor:
+            try:
+                power_data = self._power_monitor.get_power_sample()
+                sample["power"] = power_data
+            except:
+                pass
         
         return sample
     
@@ -95,6 +116,13 @@ class TimeSeriesMonitor:
             "memory_max": max(memory_values),
             "memory_min": min(memory_values),
         }
+        
+        # Process CPU summary
+        process_cpu_values = [s.get("process_cpu_percent", 0) for s in self.samples]
+        if any(v > 0 for v in process_cpu_values):
+            summary["process_cpu_avg"] = sum(process_cpu_values) / len(process_cpu_values)
+            summary["process_cpu_max"] = max(process_cpu_values)
+            summary["process_cpu_min"] = min(v for v in process_cpu_values if v > 0) if any(v > 0 for v in process_cpu_values) else 0
         
         # Per-core summary
         if self.samples and "cpu_per_core" in self.samples[0]:
