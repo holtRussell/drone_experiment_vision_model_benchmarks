@@ -114,20 +114,52 @@ class StructuredLogger:
             pipeline=pipeline
         )
     
-    def log_timeseries_resources(
+    def log_vision_resources(
         self,
         image_id: str,
         pipeline: str,
         samples: List[Dict[str, Any]],
         summary: Dict[str, Any]
     ):
-        """Log time-series resource data"""
+        """Log vision-only resource usage"""
         self.log(
-            event_type="timeseries_resources",
+            event_type="vision_resources",
             data={
                 "samples": samples,
                 "summary": summary
             },
+            image_id=image_id,
+            pipeline=pipeline
+        )
+    
+    def log_llm_resources(
+        self,
+        image_id: str,
+        pipeline: str,
+        samples: List[Dict[str, Any]],
+        summary: Dict[str, Any]
+    ):
+        """Log LLM-only resource usage"""
+        self.log(
+            event_type="llm_resources",
+            data={
+                "samples": samples,
+                "summary": summary
+            },
+            image_id=image_id,
+            pipeline=pipeline
+        )
+    
+    def log_llm_tokens(
+        self,
+        image_id: str,
+        pipeline: str,
+        token_usage: Dict[str, int]
+    ):
+        """Log LLM token usage"""
+        self.log(
+            event_type="llm_tokens",
+            data=token_usage,
             image_id=image_id,
             pipeline=pipeline
         )

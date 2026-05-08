@@ -4,6 +4,7 @@ LLM Client for Ollama - OpenAI-compatible API
 import os
 import io
 import base64
+import requests
 from typing import Optional, List, Dict, Any, Tuple
 from PIL import Image
 from openai import OpenAI
@@ -44,6 +45,45 @@ class LLMClient:
         
         self._client = None
         self._call_count = 0
+        self.last_token_usage = None  # Track token usage per request
+    
+    def count_tokens(self, text: str) -> int:
+        """
+        Count tokens using Ollama's local /api/tokenize endpoint.
+        This is a local call - no cloud API, no GPU inference.
+        """
+        if self.mock_mode:
+            # Rough estimate: 1 token ≈ 4 characters
+            return len(text) // 4
+        
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/tokenize",
+                json={"model": self.model_name, "prompt": text},
+                timeout=5
+            )
+            if response.ok:
+                tokens = response.json().get("tokens", [])
+                return len(tokens)
+        except Exception as e:
+            print(f"Token counting failed: {e}")
+        
+        # Fallback estimate
+        return len(text) // 4
+    
+    def count_tokens_multi(self, messages: list) -> int:
+        """Count tokens for a list of chat messages"""
+        total = 0
+        for msg in messages:
+            if isinstance(msg.get("content"), str):
+                total += self.count_tokens(msg["content"])
+            elif isinstance(msg.get("content"), list):
+                # Multimodal content
+                for item in msg["content"]:
+                    if item.get("type") == "text":
+                        total += self.count_tokens(item["text"])
+                    # Note: Image tokens are harder to count via /api/tokenize
+        return total
     
     def _setup_mock(self):
         """Setup mock mode"""
@@ -160,6 +200,12 @@ class LLMClient:
     ) -> str:
         """Send text-only request (for processing intermediate representation)"""
         if self.mock_mode:
+            # Mock token usage
+            self.last_token_usage = {
+                "input_tokens": len(prompt) // 4,
+                "output_tokens": 10,
+                "total_tokens": len(prompt) // 4 + 10
+            }
             return self._mock_response(prompt)
         
         model = model_type or self.model_name
@@ -170,6 +216,9 @@ class LLMClient:
         
         messages.append({"role": "user", "content": prompt})
         
+        # Count input tokens
+        input_tokens = self.count_tokens_multi(messages)
+        
         try:
             response = self.client.chat.completions.create(
                 model=model,
@@ -177,7 +226,19 @@ class LLMClient:
                 temperature=self.temperature,
                 max_tokens=self.max_tokens
             )
-            return response.choices[0].message.content or ""
+            
+            content = response.choices[0].message.content or ""
+            
+            # Count output tokens
+            output_tokens = self.count_tokens(content)
+            
+            self.last_token_usage = {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens
+            }
+            
+            return content
         except Exception as e:
             print(f"\nLLM Error: {e}")
             print(f"Falling back to mock mode for remaining requests...")

@@ -86,11 +86,10 @@ class ExperimentRunner:
             gt = self.ground_truth.parse_annotation(image_data['annotation_path'])
             result['ground_truth'] = gt
         
-        # Start time-series resource monitoring
-        self.timeseries_monitor = TimeSeriesMonitor(sample_interval_ms=100)
-        self.timeseries_monitor.start()
+        # Step 1: Vision Processing with separate monitoring
+        self.vision_monitor = TimeSeriesMonitor(sample_interval_ms=100)
+        self.vision_monitor.start()
         
-        # Step 1: Vision Processing
         self.timing.start('vision_processing')
         
         # Check vision cache
@@ -105,14 +104,36 @@ class ExperimentRunner:
         
         vision_latency = self.timing.stop('vision_processing')
         
+        # Stop vision monitoring and log
+        self.vision_monitor.stop()
+        vision_samples = self.vision_monitor.get_samples()
+        vision_summary = self.vision_monitor.get_summary()
+        
         result['intermediate_representation'] = ir
         result['vision_latency_ms'] = vision_latency
         result['vision_cache_hit'] = cache_hit
         
-        # Log vision metrics with enhanced IR data
-        self._log_vision_metrics(image_id, pipeline_name, ir, vision_latency)
+        # Get ground truth
+        ground_truth = result.get('ground_truth', {})
         
-        # Step 2: LLM Processing (IR + Query)
+        # Log vision metrics with enhanced IR data and ground truth
+        self._log_vision_metrics(image_id, pipeline_name, ir, vision_latency, ground_truth)
+        
+        # Log vision-only resource usage
+        self.logger.log(
+            event_type="vision_resources",
+            data={
+                "samples": vision_samples,
+                "summary": vision_summary
+            },
+            image_id=image_id,
+            pipeline=pipeline_name
+        )
+        
+        # Step 2: LLM Processing (IR + Query) with separate monitoring
+        self.llm_monitor = TimeSeriesMonitor(sample_interval_ms=100)
+        self.llm_monitor.start()
+        
         self.timing.start('llm_processing')
         
         # Atomic queries
@@ -139,29 +160,41 @@ class ExperimentRunner:
         
         llm_latency = self.timing.stop('llm_processing')
         
+        # Stop LLM monitoring and log
+        self.llm_monitor.stop()
+        llm_samples = self.llm_monitor.get_samples()
+        llm_summary = self.llm_monitor.get_summary()
+        
         result['atomic_responses'] = atomic_responses
         result['composite_response'] = composite_response
         result['llm_latency_ms'] = llm_latency
         
-        # Stop time-series monitoring and log results
-        self.timeseries_monitor.stop()
-        timeseries_samples = self.timeseries_monitor.get_samples()
-        timeseries_summary = self.timeseries_monitor.get_summary()
+        # Get token usage from LLM client
+        token_usage = getattr(self.llm_client, 'last_token_usage', None)
+        result['token_usage'] = token_usage
         
-        # Log time-series resources
+        # Log LLM-only resource usage
         self.logger.log(
-            event_type="timeseries_resources",
+            event_type="llm_resources",
             data={
-                "samples": timeseries_samples,
-                "summary": timeseries_summary
+                "samples": llm_samples,
+                "summary": llm_summary
             },
             image_id=image_id,
             pipeline=pipeline_name
         )
         
+        # Log LLM tokens
+        if token_usage:
+            self.logger.log(
+                event_type="llm_tokens",
+                data=token_usage,
+                image_id=image_id,
+                pipeline=pipeline_name
+            )
+        
         # Resource usage (snapshot)
         result['resources'] = self.monitor.get_snapshot()
-        result['timeseries_summary'] = timeseries_summary
         
         # Total latency
         result['total_latency_ms'] = vision_latency + llm_latency
@@ -175,7 +208,8 @@ class ExperimentRunner:
         image_id: str,
         pipeline: str,
         ir: Dict[str, Any],
-        latency_ms: float
+        latency_ms: float,
+        ground_truth: Optional[Dict[str, int]] = None
     ):
         """Log enhanced vision metrics from IR"""
         metadata = ir.get("metadata", {})
@@ -188,21 +222,31 @@ class ExperimentRunner:
         # Get per-class confidences
         avg_conf_per_class = metadata.get("avg_confidence_per_class", {})
         
+        log_data = {
+            "cars": ir.get("cars", 0),
+            "pedestrians": ir.get("pedestrians", 0),
+            "bicycles": ir.get("bicycles", 0),
+            "total_detections": len(detections),
+            "confidence_scores": confidence_scores,
+            "avg_confidence": avg_confidence,
+            "avg_confidence_per_class": avg_conf_per_class,
+            "image_resolution": metadata.get("image_resolution"),
+            "model_input_size": metadata.get("model_input_size"),
+            "latency_ms": latency_ms,
+            "cache_hit": ir.get("cache_hit", False)
+        }
+        
+        # Add ground truth if available (flatten into log data)
+        if ground_truth:
+            log_data.update({
+                "gt_cars": ground_truth.get("cars", 0),
+                "gt_pedestrians": ground_truth.get("pedestrians", 0),
+                "gt_bicycles": ground_truth.get("bicycles", 0),
+            })
+        
         self.logger.log(
             event_type="vision_metrics",
-            data={
-                "cars": ir.get("cars", 0),
-                "pedestrians": ir.get("pedestrians", 0),
-                "bicycles": ir.get("bicycles", 0),
-                "total_detections": len(detections),
-                "confidence_scores": confidence_scores,
-                "avg_confidence": avg_confidence,
-                "avg_confidence_per_class": avg_conf_per_class,
-                "image_resolution": metadata.get("image_resolution"),
-                "model_input_size": metadata.get("model_input_size"),
-                "latency_ms": latency_ms,
-                "cache_hit": ir.get("cache_hit", False)
-            },
+            data=log_data,
             image_id=image_id,
             pipeline=pipeline
         )
