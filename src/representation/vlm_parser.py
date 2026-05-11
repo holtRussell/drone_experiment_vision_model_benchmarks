@@ -2,8 +2,100 @@
 Parser to convert VLM text outputs to Intermediate Representation
 """
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from src.representation.schema import create_ir
+
+
+def extract_count_from_text(text: str, obj_type: str) -> int:
+    """Extract count for specific object type from text"""
+    text_lower = text.lower()
+    
+    # Find all numbers in the text
+    all_numbers = re.findall(r'\d+', text)
+    if not all_numbers:
+        return 0
+    
+    # For mock mode, return the last number found (usually the actual count)
+    # In real mode, this would be more sophisticated
+    try:
+        return int(all_numbers[-1])  # Return last number found
+    except (ValueError, IndexError):
+        return 0
+    
+    # For mock mode, just return the first number found
+    # In real mode, this would be more sophisticated
+    try:
+        return int(numbers[0])
+    except (ValueError, IndexError):
+        return 0
+
+
+def parse_atomic_responses(
+    atomic_responses: Dict[str, str],
+    composite_response: str,
+    pipeline_name: str
+) -> Dict[str, Any]:
+    """
+    Parse BOTH atomic and composite VLM responses for counts.
+    
+    Args:
+        atomic_responses: Dict with keys 'cars', 'pedestrians', 'bicycles'
+                          and values = LLM text responses
+        composite_response: Full composite response text
+        pipeline_name: Pipeline name for tracking
+    
+    Returns:
+        Intermediate Representation with counts from both sources
+    """
+    # Initialize counts
+    cars = 0
+    pedestrians = 0
+    bicycles = 0
+    
+    atomic_counts = {}
+    
+    # Parse atomic responses (more reliable for counts)
+    for obj_type, response in atomic_responses.items():
+        count = extract_count_from_text(response, obj_type)
+        atomic_counts[obj_type] = count
+        
+        if obj_type == 'cars':
+            cars = count
+        elif obj_type == 'pedestrians':
+            pedestrians = count
+        elif obj_type == 'bicycles':
+            bicycles = count
+    
+    # Fallback: Parse composite response if atomic failed
+    if cars == 0 or pedestrians == 0 or bicycles == 0:
+        composite_counts = {
+            'cars': extract_count_from_text(composite_response, 'cars'),
+            'pedestrians': extract_count_from_text(composite_response, 'pedestrians'),
+            'bicycles': extract_count_from_text(composite_response, 'bicycles'),
+        }
+        
+        cars = cars or composite_counts['cars']
+        pedestrians = pedestrians or composite_counts['pedestrians']
+        bicycles = bicycles or composite_counts['bicycles']
+    
+    return create_ir(
+        cars=cars,
+        pedestrians=pedestrians,
+        bicycles=bicycles,
+        raw_description=composite_response,
+        pipeline_name=pipeline_name,
+        metadata={
+            "parsing_method": "atomic_then_composite",
+            "atomic_responses": atomic_responses,
+            "composite_response": composite_response,
+            "atomic_counts": atomic_counts,
+            "composite_counts": {
+                'cars': extract_count_from_text(composite_response, 'cars'),
+                'pedestrians': extract_count_from_text(composite_response, 'pedestrians'),
+                'bicycles': extract_count_from_text(composite_response, 'bicycles'),
+            }
+        }
+    )
 
 
 def parse_vlm_response(

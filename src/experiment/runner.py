@@ -116,8 +116,9 @@ class ExperimentRunner:
         # Get ground truth
         ground_truth = result.get('ground_truth', {})
         
-        # Log vision metrics with enhanced IR data and ground truth
-        self._log_vision_metrics(image_id, pipeline_name, ir, vision_latency, ground_truth)
+        # For VLM pipelines, don't log vision metrics yet (will log after VLM parsing)
+        if pipeline_name not in ['vlm_direct', 'vlm_multiagent']:
+            self._log_vision_metrics(image_id, pipeline_name, ir, vision_latency, ground_truth)
         
         # Log vision-only resource usage
         self.logger.log(
@@ -168,6 +169,23 @@ class ExperimentRunner:
         result['atomic_responses'] = atomic_responses
         result['composite_response'] = composite_response
         result['llm_latency_ms'] = llm_latency
+        
+        # For VLM pipelines, create IR from atomic + composite responses
+        if pipeline_name in ['vlm_direct', 'vlm_multiagent']:
+            from src.representation.vlm_parser import parse_atomic_responses
+            vlm_ir = parse_atomic_responses(
+                atomic_responses=atomic_responses,
+                composite_response=composite_response,
+                pipeline_name=pipeline_name
+            )
+            # Update result with new IR
+            result['intermediate_representation'] = vlm_ir
+            # Update vision metrics with new IR
+            vision_latency = vlm_ir.get('metadata', {}).get('latency_ms', 0) or vision_latency
+            self._log_vision_metrics(image_id, pipeline_name, vlm_ir, vision_latency, ground_truth)
+        else:
+            # For YOLO pipelines, log with original IR
+            self._log_vision_metrics(image_id, pipeline_name, ir, vision_latency, ground_truth)
         
         # Get token usage from LLM client
         token_usage = getattr(self.llm_client, 'last_token_usage', None)
@@ -233,7 +251,8 @@ class ExperimentRunner:
             "image_resolution": metadata.get("image_resolution"),
             "model_input_size": metadata.get("model_input_size"),
             "latency_ms": latency_ms,
-            "cache_hit": ir.get("cache_hit", False)
+            "cache_hit": ir.get("cache_hit", False),
+            "metadata": metadata  # Include full metadata for VLM parsing info
         }
         
         # Add ground truth if available (flatten into log data)

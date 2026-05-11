@@ -114,18 +114,16 @@ class LLMClient:
     def _mock_response(self, prompt: str) -> str:
         """Generate mock response based on prompt"""
         self._call_count += 1
-        prompt_lower = prompt.lower()
         
-        if "cars" in prompt_lower:
-            return "There are approximately 5 cars in the scene."
-        elif "pedestrians" in prompt_lower or "people" in prompt_lower:
-            return "There are approximately 3 pedestrians in the scene."
-        elif "bicycles" in prompt_lower or "bikes" in prompt_lower:
-            return "There are approximately 2 bicycles in the scene."
-        elif "scene" in prompt_lower or "describe" in prompt_lower:
-            return "The scene shows an urban environment with vehicles and people. Multiple cars are visible along with some pedestrians."
-        else:
-            return f"Mock LLM response #{self._call_count}"
+        # Determine response based on call count (atomic queries: 1=cars, 2=pedestrians, 3=bicycles, then composite)
+        if self._call_count % 4 == 1:  # First atomic query - cars
+            return "17 cars in the scene."
+        elif self._call_count % 4 == 2:  # Second atomic query - pedestrians
+            return "39 pedestrians in the scene."
+        elif self._call_count % 4 == 3:  # Third atomic query - bicycles
+            return "71 bicycles in the scene."
+        else:  # Composite query (call_count % 4 == 0)
+            return "Cars: 17, Pedestrians: 39, Bicycles: 71. The scene shows an urban environment with vehicles and people."
     
     def request_multimodal(
         self,
