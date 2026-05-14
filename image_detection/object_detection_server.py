@@ -18,7 +18,8 @@ from ultralytics import YOLO
 server = FastMCP("Agent Tools Server", host='0.0.0.0', port=8099, stateless_http=True, json_response=True)
 
 # Use YOLO's built-in model loading
-img_model = YOLO("./Visdrone_yolov8s.pt")
+# YOLOv8m (medium) - better accuracy than small, faster than large
+img_model = YOLO("./models/yolov8m.pt")
 
 @server.tool(name="detect_objects_in_image", description="""Calls an object detection model to identify objects in an image. Returns a JSON list of objects detected in the image with class names and confidence scores.""")
 def detect_objects_in_image(image_location: Annotated[str, Field(description='Absolute filepath to image to run detection model on')]):
@@ -33,7 +34,7 @@ def detect_objects_in_image(image_location: Annotated[str, Field(description='Ab
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Use absolute path directly (no prepending ./images/)
-    results = img_model.predict(source=image_location, conf=0.2, save=True, project=str(output_dir), name='outputs', exist_ok=True)
+    results = img_model.predict(source=image_location, conf=0.25, save=True, project=str(output_dir), name='outputs', exist_ok=True)
 
     detections = []
     result_info = results[0]

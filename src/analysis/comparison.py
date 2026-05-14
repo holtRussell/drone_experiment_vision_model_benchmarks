@@ -200,21 +200,45 @@ def generate_visualizations(df: pd.DataFrame, output_dir: str = "results/analysi
         plt.close()
         print(f"  Saved: {output_path / 'vision_latency_comparison.png'}")
     
-    # 2. Detection Count Comparison
+    # 2. Detection Count Comparison with Ground Truth
     if not vision_df.empty:
         detection_cols = ['cars', 'pedestrians', 'bicycles']
         for col in detection_cols:
             vision_df[col] = pd.to_numeric(vision_df[col], errors='coerce')
         
+        # Get mean predictions and ground truth per pipeline
+        # FIX: Already using mean() - this was correct
         detection_summary = vision_df.groupby('pipeline')[detection_cols].mean()
         
-        fig, ax = plt.subplots(figsize=(10, 6))
-        detection_summary.plot(kind='bar', ax=ax)
-        ax.set_title('Average Detections by Pipeline', fontsize=14, fontweight='bold')
-        ax.set_ylabel('Count', fontsize=12)
-        ax.set_xlabel('Pipeline', fontsize=12)
-        ax.legend(title='Object Type', fontsize=10)
+        # Also calculate ground truth means
+        gt_cols = ['gt_cars', 'gt_pedestrians', 'gt_bicycles']
+        for col in gt_cols:
+            if col in vision_df.columns:
+                vision_df[col] = pd.to_numeric(vision_df[col], errors='coerce')
+        
+        gt_summary = vision_df.groupby('pipeline')[['gt_cars', 'gt_pedestrians', 'gt_bicycles']].mean()
+        
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+        
+        # Left: Predictions
+        detection_summary.plot(kind='bar', ax=axes[0], color=['#e74c3c', '#3498db', '#2ecc71'])
+        axes[0].set_title('Predicted Counts', fontsize=14, fontweight='bold')
+        axes[0].set_ylabel('Count', fontsize=12)
+        axes[0].set_xlabel('Pipeline', fontsize=12)
+        axes[0].legend(title='Object Type', fontsize=10)
+        plt.sca(axes[0])
         plt.xticks(rotation=45)
+        
+        # Right: Ground Truth
+        gt_summary.columns = ['cars', 'pedestrians', 'bicycles']  # Rename for plotting
+        gt_summary.plot(kind='bar', ax=axes[1], color=['#e74c3c', '#3498db', '#2ecc71'], alpha=0.6)
+        axes[1].set_title('Ground Truth Counts', fontsize=14, fontweight='bold')
+        axes[1].set_ylabel('Count', fontsize=12)
+        axes[1].set_xlabel('Pipeline', fontsize=12)
+        axes[1].legend(title='Object Type', fontsize=10)
+        plt.sca(axes[1])
+        plt.xticks(rotation=45)
+        
         plt.tight_layout()
         plt.savefig(output_path / 'detection_counts.png', dpi=300)
         plt.close()
@@ -237,11 +261,85 @@ def generate_visualizations(df: pd.DataFrame, output_dir: str = "results/analysi
             plt.close()
             print(f"  Saved: {output_path / 'confidence_comparison.png'}")
     
-    # 4. Vision Resource Usage (separate from LLM)
+    # 4. Vision Resource Usage (Bar Charts + Time Series)
     vision_res_df = df[df['event_type'] == 'vision_resources'].copy()
     if not vision_res_df.empty:
+        # 4a. Bar Charts for Average CPU and Memory
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        fig.suptitle('Vision Processing Resource Usage (Average per Pipeline)', fontsize=14, fontweight='bold')
+        
+        # Get unique pipelines
+        pipelines = vision_res_df['pipeline'].unique()
+        x = range(len(pipelines))
+        
+        # Average System CPU Usage
+        cpu_avgs = []
+        cpu_stds = []
+        for pipe in pipelines:
+            pipe_data = vision_res_df[vision_res_df['pipeline'] == pipe]
+            cpu_vals = pd.to_numeric(pipe_data['vision_cpu_avg'], errors='coerce').dropna()
+            if len(cpu_vals) > 0:
+                cpu_avgs.append(cpu_vals.mean())
+                cpu_stds.append(cpu_vals.std() if len(cpu_vals) > 1 else 0)
+            else:
+                cpu_avgs.append(0)
+                cpu_stds.append(0)
+        
+        axes[0].bar(x, cpu_avgs, yerr=cpu_stds, capsize=5, color='#3498db', alpha=0.8)
+        axes[0].set_title('System: Average CPU Usage', fontsize=12, fontweight='bold')
+        axes[0].set_ylabel('CPU %', fontsize=10)
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(pipelines, rotation=45, ha='right')
+        axes[0].set_xlabel('What it means: Total CPU usage across ALL cores\naveraged over the monitoring period')
+        
+        # Average Memory Usage
+        mem_avgs = []
+        mem_stds = []
+        for pipe in pipelines:
+            pipe_data = vision_res_df[vision_res_df['pipeline'] == pipe]
+            mem_vals = pd.to_numeric(pipe_data['vision_memory_avg'], errors='coerce').dropna()
+            if len(mem_vals) > 0:
+                mem_avgs.append(mem_vals.mean())
+                mem_stds.append(mem_vals.std() if len(mem_vals) > 1 else 0)
+            else:
+                mem_avgs.append(0)
+                mem_stds.append(0)
+        
+        axes[1].bar(x, mem_avgs, yerr=mem_stds, capsize=5, color='#2ecc71', alpha=0.8)
+        axes[1].set_title('System: Average Memory Usage', fontsize=12, fontweight='bold')
+        axes[1].set_ylabel('Memory %', fontsize=10)
+        axes[1].set_xticks(x)
+        axes[1].set_xticklabels(pipelines, rotation=45, ha='right')
+        axes[1].set_xlabel('What it means: Percentage of total system RAM\nused during vision processing')
+        
+        # Process CPU Usage
+        proc_avgs = []
+        proc_stds = []
+        for pipe in pipelines:
+            pipe_data = vision_res_df[vision_res_df['pipeline'] == pipe]
+            proc_vals = pd.to_numeric(pipe_data['vision_process_cpu_avg'], errors='coerce').dropna()
+            if len(proc_vals) > 0:
+                proc_avgs.append(proc_vals.mean())
+                proc_stds.append(proc_vals.std() if len(proc_vals) > 1 else 0)
+            else:
+                proc_avgs.append(0)
+                proc_stds.append(0)
+        
+        axes[2].bar(x, proc_avgs, yerr=proc_stds, capsize=5, color='#e74c3c', alpha=0.8)
+        axes[2].set_title('Process: Average CPU Usage', fontsize=12, fontweight='bold')
+        axes[2].set_ylabel('CPU %', fontsize=10)
+        axes[2].set_xticks(x)
+        axes[2].set_xticklabels(pipelines, rotation=45, ha='right')
+        axes[2].set_xlabel('What it means: CPU usage of ONLY the vision\nprocess itself (can exceed 100% on multi-core)')
+        
+        plt.tight_layout()
+        plt.savefig(output_path / 'vision_resource_bars.png', dpi=300)
+        plt.close()
+        print(f"  Saved: {output_path / 'vision_resource_bars.png'}")
+        
+        # 4b. Time Series (existing)
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-        fig.suptitle('Vision Processing Resource Usage', fontsize=16, fontweight='bold')
+        fig.suptitle('Vision Processing Resource Usage (Time Series)', fontsize=16, fontweight='bold')
         
         # Vision CPU usage
         cpu_data = vision_res_df.dropna(subset=['vision_cpu_avg'])
@@ -368,17 +466,44 @@ def generate_accuracy_charts(df: pd.DataFrame, output_dir: str = "results/analys
         print("  ⚠️  No ground truth data available for accuracy charts")
         return
     
-    # Chart 1: Predicted vs Actual (Grouped Bar Chart)
+    # Chart 1: Predicted vs Actual (Grouped Bar Chart with Ground Truth Section)
+    # FIX: Use mean instead of sum to avoid counting same image multiple times
     categories = ['cars', 'pedestrians', 'bicycles']
     display_names = ['Cars', 'Pedestrians', 'Bicycles']
     
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    fig, axes = plt.subplots(1, 4, figsize=(24, 6))
     fig.suptitle('Predicted vs Actual Counts by Pipeline', fontsize=16, fontweight='bold')
     
+    # First axis: Ground Truth bar for each pipeline (mean per unique image)
+    ax_gt = axes[0]
+    gt_plot_data = []
+    for pipeline in gt_available['pipeline'].unique():
+        pipe_data = gt_available[gt_available['pipeline'] == pipeline]
+        for cat, display in zip(categories, display_names):
+            gt_col = f'gt_{cat}'
+            if gt_col in pipe_data.columns:
+                # Use mean to avoid duplicate counting from repetitions
+                gt_plot_data.append({
+                    'pipeline': pipeline,
+                    'category': display,
+                    'gt_count': pipe_data[gt_col].mean()
+                })
+    
+    if gt_plot_data:
+        gt_df = pd.DataFrame(gt_plot_data)
+        gt_df['type'] = 'Ground Truth'
+        sns.barplot(data=gt_df, x='category', y='gt_count', hue='pipeline', ax=ax_gt, palette='Greys')
+        ax_gt.set_title('Ground Truth\n(Reference)', fontsize=12, fontweight='bold')
+        ax_gt.set_xlabel('Category', fontsize=10)
+        ax_gt.set_ylabel('Count', fontsize=10)
+        ax_gt.tick_params(axis='x', rotation=45)
+        ax_gt.legend(fontsize=8, title='Pipeline')
+    
+    # Remaining axes: Actual vs Predicted per category
     for idx, (cat, display) in enumerate(zip(categories, display_names)):
-        ax = axes[idx]
+        ax = axes[idx + 1]
         
-        # Calculate mean predicted vs actual per pipeline
+        # Calculate mean predicted vs actual per pipeline (FIX: use mean, not sum)
         plot_data = []
         for pipeline in gt_available['pipeline'].unique():
             pipe_data = gt_available[gt_available['pipeline'] == pipeline]
@@ -387,26 +512,24 @@ def generate_accuracy_charts(df: pd.DataFrame, output_dir: str = "results/analys
                 plot_data.append({
                     'pipeline': pipeline,
                     'type': 'Actual',
-                    'count': pipe_data[gt_col].mean(),
+                    'count': pipe_data[gt_col].mean(),  # FIX: use mean
                     'category': display
                 })
             plot_data.append({
                 'pipeline': pipeline,
                 'type': 'Predicted',
-                'count': pipe_data[cat].mean(),
+                'count': pipe_data[cat].mean(),  # FIX: use mean
                 'category': display
             })
         
         if plot_data:
             plot_df = pd.DataFrame(plot_data)
-            
-            # Grouped bar chart
-            sns.barplot(data=plot_df, x='pipeline', y='count', hue='type', ax=ax)
-            ax.set_title(f'{display}', fontsize=14)
+            sns.barplot(data=plot_df, x='pipeline', y='count', hue='type', ax=ax, palette={'Actual': '#3498db', 'Predicted': '#e74c3c'})
+            ax.set_title(f'{display}', fontsize=12)
             ax.set_xlabel('Pipeline', fontsize=10)
             ax.set_ylabel('Count', fontsize=10)
             ax.tick_params(axis='x', rotation=45)
-            ax.legend(fontsize=9)
+            ax.legend(fontsize=8)
     
     plt.tight_layout()
     plt.savefig(output_path / 'accuracy_predicted_vs_actual.png', dpi=300)
@@ -448,61 +571,53 @@ def generate_accuracy_charts(df: pd.DataFrame, output_dir: str = "results/analys
         plt.close()
         print(f"  Saved: {output_path / 'accuracy_mae_heatmap.png'}")
     
-    # Chart 3: False Positive/Negative Rates (Stacked Bar)
+    # Chart 3: Accuracy Comparison (Ground Truth vs Predictions stacked bar)
+    # Show ground truth alongside predictions for comparison
+    # FIX: Use mean instead of sum to avoid duplicate counting from repetitions
     error_data = []
     
     for pipeline in gt_available['pipeline'].unique():
         pipe_data = gt_available[gt_available['pipeline'] == pipeline]
         
-        for cat in categories:
+        for cat, display in zip(categories, display_names):
             gt_col = f'gt_{cat}'
             pred_col = cat
             
-            correct = 0
-            false_pos = 0
-            false_neg = 0
-            
-            for _, row in pipe_data.iterrows():
-                gt = row.get(gt_col, 0) or 0
-                pred = row.get(pred_col, 0) or 0
-                
-                correct += min(gt, pred)
-                false_pos += max(0, pred - gt)
-                false_neg += max(0, gt - pred)
+            # FIX: Use mean() instead of sum() to get per-image average
+            gt_total = pipe_data[gt_col].mean() if gt_col in pipe_data.columns else 0
+            pred_total = pipe_data[pred_col].mean() if pred_col in pipe_data.columns else 0
             
             error_data.append({
                 'pipeline': pipeline,
-                'category': cat,
-                'correct': correct,
-                'false_positive': false_pos,
-                'false_negative': false_neg
+                'category': display,
+                'Ground Truth': gt_total,
+                'Predicted': pred_total
             })
     
     if error_data:
         error_df = pd.DataFrame(error_data)
         
-        # Create stacked bar chart
+        # Create grouped bar chart: Ground Truth vs Predicted
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-        fig.suptitle('Detection Errors by Pipeline', fontsize=16, fontweight='bold')
+        fig.suptitle('Ground Truth vs Predicted Counts by Pipeline', fontsize=16, fontweight='bold')
         
-        for idx, cat in enumerate(categories):
+        for idx, cat in enumerate(display_names):
             ax = axes[idx]
             cat_data = error_df[error_df['category'] == cat]
             
-            # Pivot for stacked bar
-            pipelines = cat_data['pipeline'].tolist()
-            correct = cat_data['correct'].tolist()
-            fp = cat_data['false_positive'].tolist()
-            fn = cat_data['false_negative'].tolist()
+            x = cat_data['pipeline']
+            gt_vals = cat_data['Ground Truth'].values
+            pred_vals = cat_data['Predicted'].values
             
-            ax.bar(pipelines, correct, label='Correct', color='green', alpha=0.7)
-            ax.bar(pipelines, fp, bottom=correct, label='False Positive', color='red', alpha=0.7)
-            ax.bar(pipelines, fn, bottom=[c+f for c, f in zip(correct, fp)], label='False Negative', color='orange', alpha=0.7)
+            x_pos = range(len(x))
+            ax.bar([p - 0.2 for p in x_pos], gt_vals, width=0.4, label='Ground Truth', color='#34495e', alpha=0.8)
+            ax.bar([p + 0.2 for p in x_pos], pred_vals, width=0.4, label='Predicted', color='#e74c3c', alpha=0.8)
             
-            ax.set_title(f'{display_names[idx]}', fontsize=14)
+            ax.set_title(f'{cat}', fontsize=14)
             ax.set_xlabel('Pipeline', fontsize=10)
             ax.set_ylabel('Count', fontsize=10)
-            ax.tick_params(axis='x', rotation=45)
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(x, rotation=45)
             ax.legend(fontsize=9)
         
         plt.tight_layout()

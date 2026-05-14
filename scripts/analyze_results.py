@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.analysis import load_results, generate_visualizations
+from src.analysis.phase_timing import load_phase_timing, generate_phase_timing_gantt, generate_phase_summary_stats
 
 
 def main():
@@ -46,6 +47,23 @@ def main():
     # Generate visualizations
     print(f"\nGenerating visualizations in {args.output_dir}/...")
     generate_visualizations(df, args.output_dir)
+    
+    # Generate phase timing Gantt chart
+    print(f"\nGenerating phase timing Gantt chart...")
+    phase_df = load_phase_timing(args.log_dir)
+    if not phase_df.empty:
+        generate_phase_timing_gantt(phase_df, args.output_dir)
+        
+        # Print phase timing summary
+        stats = generate_phase_summary_stats(phase_df)
+        print("\nPhase Timing Summary (ms):")
+        for pipeline, timing in stats.get('by_pipeline', {}).items():
+            print(f"\n  {pipeline}:")
+            print(f"    Vision: {timing['vision_mean']:.1f} ± {timing['vision_std']:.1f}")
+            print(f"    LLM Atomic: {timing['llm_atomic_mean']:.1f} ± {timing['llm_atomic_std']:.1f}")
+            print(f"    LLM Composite: {timing['llm_composite_mean']:.1f} ± {timing['llm_composite_std']:.1f}")
+    else:
+        print("  ⚠️  No phase timing data found (run experiment first)")
     
     # Print summary statistics
     print("\n" + "=" * 50)

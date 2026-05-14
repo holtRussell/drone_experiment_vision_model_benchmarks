@@ -20,10 +20,11 @@ experiment:
   # Pipeline-specific configs
   pipeline_configs:
     yolo_local:
-      model: "models/yolov8-visdrone.pt"  # VisDrone-trained YOLOv8
+      model: "./models/yolov8m.pt"  # TypeFly YOLOv8m (COCO-trained)
       conf: 0.25
     yolo_mcp:
       enabled: true
+      model: "./models/yolov8m.pt"  # MCP server uses same model
       mcp_url: "http://localhost:8099"  # image_detection server
     vlm_direct:
       temperature: 0.1

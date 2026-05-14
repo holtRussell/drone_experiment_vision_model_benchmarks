@@ -31,19 +31,29 @@ COCO_CLASS_MAP = {
 
 
 def detect_model_type(model_names: dict) -> str:
-    """Detect if model is trained on VisDrone or COCO based on class names"""
+    """
+    Detect if model is trained on VisDrone or COCO based on class names.
+    
+    COCO (80 classes): has 'person' but NOT 'pedestrian'
+    VisDrone (10 classes): has 'pedestrian' but NOT 'person'
+    """
     if not model_names:
         return "unknown"
     
-    # Check for VisDrone-specific classes
-    visdrone_classes = {"pedestrian", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor"}
-    model_classes = set(model_names.values())
+    model_classes = set(v.lower() for v in model_names.values())
     
-    # If any VisDrone-specific class exists
-    if model_classes & visdrone_classes:
+    # COCO has 'person', VisDrone has 'pedestrian' (these are mutually exclusive)
+    if "person" in model_classes and "pedestrian" not in model_classes:
+        return "coco"
+    
+    if "pedestrian" in model_classes:
         return "visdrone"
     
-    return "coco"
+    # Fallback: COCO typically has ~80 classes, VisDrone has ~10
+    if len(model_classes) >= 50:
+        return "coco"
+    
+    return "visdrone"
 
 
 def parse_yolo_results(

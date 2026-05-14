@@ -69,6 +69,9 @@ class ExperimentRunner:
         """
         Run single pass: Vision Pipeline -> IR -> LLM -> Output
         """
+        # Reset LLM timing tracker for this run
+        self.llm_client.reset_timing()
+        
         image_id = image_data['image_id']
         image_path = image_data['image_path']
         
@@ -97,10 +100,15 @@ class ExperimentRunner:
         
         if cache_hit:
             ir = cached_ir
+            pipeline = None  # Can't get specs from cached IR
         else:
             pipeline = self.get_pipeline(pipeline_name)
             ir = pipeline.process(image)
             self.cache.set_vision_cache(image_id, pipeline_name, ir)
+            
+            # Log model specs for YOLO pipelines (only when freshly processed)
+            if pipeline_name == 'yolo_local' and hasattr(pipeline, 'get_model_specs'):
+                self._log_model_specs(image_id, pipeline_name, pipeline.get_model_specs())
         
         vision_latency = self.timing.stop('vision_processing')
         
@@ -148,6 +156,8 @@ class ExperimentRunner:
             
             if cached_response:
                 response = cached_response
+                # Record cached call to maintain timing alignment
+                self.llm_client.record_skipped_llm_call()
             else:
                 response = self.llm_client.request_text(ir_prompt, self.prompts.get_system_prompt())
                 self.cache.set_llm_cache(ir_prompt, response)
@@ -157,7 +167,16 @@ class ExperimentRunner:
         # Composite query
         composite_query = self.prompts.get_composite_query()
         composite_ir_prompt = self.prompts.get_ir_prompt(ir, composite_query)
-        composite_response = self.llm_client.request_text(composite_ir_prompt, self.prompts.get_system_prompt())
+        
+        # Check cache for composite
+        cached_composite, composite_cache_hit = self.cache.get_llm_cache(composite_ir_prompt)
+        
+        if cached_composite:
+            composite_response = cached_composite
+            self.llm_client.record_skipped_llm_call()
+        else:
+            composite_response = self.llm_client.request_text(composite_ir_prompt, self.prompts.get_system_prompt())
+            self.cache.set_llm_cache(composite_ir_prompt, composite_response)
         
         llm_latency = self.timing.stop('llm_processing')
         
@@ -169,6 +188,22 @@ class ExperimentRunner:
         result['atomic_responses'] = atomic_responses
         result['composite_response'] = composite_response
         result['llm_latency_ms'] = llm_latency
+        
+        # Log phase timing breakdown (for Gantt chart visualization)
+        timing_breakdown = self.llm_client.get_timing_breakdown()
+        phase_timing = {
+            "vision_ms": vision_latency,
+            "llm_atomic_ms": timing_breakdown.get("atomic_ms", 0),
+            "llm_composite_ms": timing_breakdown.get("composite_ms", 0),
+            "total_ms": vision_latency + llm_latency,
+            "individual_llm_times": timing_breakdown.get("individual_times", [])
+        }
+        self.logger.log(
+            event_type="phase_timing",
+            data=phase_timing,
+            image_id=image_id,
+            pipeline=pipeline_name
+        )
         
         # For VLM pipelines, create IR from atomic + composite responses
         if pipeline_name in ['vlm_direct', 'vlm_multiagent']:
@@ -266,6 +301,20 @@ class ExperimentRunner:
         self.logger.log(
             event_type="vision_metrics",
             data=log_data,
+            image_id=image_id,
+            pipeline=pipeline
+        )
+    
+    def _log_model_specs(
+        self,
+        image_id: str,
+        pipeline: str,
+        model_specs: Dict[str, Any]
+    ):
+        """Log model specifications separately for tracking"""
+        self.logger.log(
+            event_type="model_specs",
+            data=model_specs,
             image_id=image_id,
             pipeline=pipeline
         )

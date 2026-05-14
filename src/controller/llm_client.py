@@ -46,6 +46,7 @@ class LLMClient:
         self._client = None
         self._call_count = 0
         self.last_token_usage = None  # Track token usage per request
+        self._call_times_ms = []  # Track timing for each LLM call (for phase analysis)
     
     def count_tokens(self, text: str) -> int:
         """
@@ -197,6 +198,9 @@ class LLMClient:
         model_type: Optional[str] = None
     ) -> str:
         """Send text-only request (for processing intermediate representation)"""
+        import time
+        start_time = time.perf_counter()
+        
         if self.mock_mode:
             # Mock token usage
             self.last_token_usage = {
@@ -204,7 +208,10 @@ class LLMClient:
                 "output_tokens": 10,
                 "total_tokens": len(prompt) // 4 + 10
             }
-            return self._mock_response(prompt)
+            response = self._mock_response(prompt)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            self._call_times_ms.append(elapsed_ms)
+            return response
         
         model = model_type or self.model_name
         
@@ -236,9 +243,55 @@ class LLMClient:
                 "total_tokens": input_tokens + output_tokens
             }
             
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            self._call_times_ms.append(elapsed_ms)
+            
             return content
         except Exception as e:
             print(f"\nLLM Error: {e}")
             print(f"Falling back to mock mode for remaining requests...")
             self.mock_mode = True
-            return self._mock_response(prompt)
+            response = self._mock_response(prompt)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            self._call_times_ms.append(elapsed_ms)
+            return response
+    
+    def get_timing_breakdown(self) -> Dict[str, float]:
+        """
+        Get timing breakdown for LLM calls.
+        Returns atomic and composite timing separately.
+        
+        For VLM pipelines: 3 atomic queries (cars, pedestrians, bicycles) + 1 composite
+        For YOLO pipelines: Same (LLM is used for all pipelines in the architecture)
+        
+        Returns:
+            Dict with 'atomic_ms', 'composite_ms', 'total_llm_ms'
+        """
+        if len(self._call_times_ms) < 4:
+            return {
+                "atomic_ms": sum(self._call_times_ms[:3]) if len(self._call_times_ms) >= 1 else 0,
+                "composite_ms": self._call_times_ms[3] if len(self._call_times_ms) > 3 else 0,
+                "total_llm_ms": sum(self._call_times_ms),
+                "individual_times": self._call_times_ms.copy()
+            }
+        
+        return {
+            "atomic_ms": sum(self._call_times_ms[:3]),
+            "composite_ms": self._call_times_ms[3],
+            "total_llm_ms": sum(self._call_times_ms),
+            "individual_times": self._call_times_ms.copy()
+        }
+    
+    def reset_timing(self):
+        """Reset timing tracker for new image/run"""
+        self._call_times_ms = []
+    
+    def record_skipped_llm_call(self, estimated_ms: float = 0.001):
+        """
+        Record a skipped (cached) LLM call timing.
+        This ensures the timing array stays consistent with actual call count.
+        
+        Args:
+            estimated_ms: Estimated time for cached response (default: ~0ms = instant)
+        """
+        self._call_times_ms.append(estimated_ms)
