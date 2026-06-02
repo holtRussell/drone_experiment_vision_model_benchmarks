@@ -40,20 +40,28 @@ class VlmMultiAgentPipeline(BasePipeline):
 3. Count of bicycles
 4. Brief scene description
 
-Be precise with counts."""
+Be precise with counts.
+
+Example:
+1. Cars: 7
+2. Pedestrians: 15
+3. Bicycles: 8
+4. This scene contains a crowd of people walking across a busy street with many cars and bikes.
+
+DO NOT use generalizeations such as "dozens" or "many". Instead use specific words to measure each response."""
         
         response1, _, _ = self.llm_client.request_multimodal(initial_query, image)
         
         # Step 2: Refinement query
         refinement_query = f"""Based on the previous analysis: "{response1}"
 
-Please verify and provide final counts:
-- Cars: <number>
-- Pedestrians: <number>
-- Bicycles: <number>
-- Description: <one sentence>
+Please verify and provide final counts and respond in JSON format.
 
-Respond in JSON format if possible."""
+Example: 
+Cars: 7,
+Pedestrians: 15,
+Bicycles: 8,
+"""
         
         response2, _, _ = self.llm_client.request_multimodal(refinement_query, image)
         
